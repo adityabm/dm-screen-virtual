@@ -1,26 +1,104 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f0f0f0;
+  --card-bg: #ffffff;
+  --text: #000000;
+  --border: #000000;
+  --shadow: #000000;
+  --primary: #ff4d4d;
+  --secondary: #4d94ff;
+  --accent: #ffcc00;
+}
+
+.dark {
+  --bg: #121212;
+  --card-bg: #1e1e1e;
+  --text: #ffffff;
+  --border: #ffffff;
+  --shadow: #ff4d4d;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-lexend), sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.font-fantasy {
+  font-family: var(--font-cinzel), serif;
+}
+
+/* Neobrutalism Essentials */
+@layer components {
+  .neo-card {
+    background-color: var(--card-bg);
+    border: 4px solid var(--border);
+    box-shadow: 8px 8px 0px 0px var(--shadow);
+    transition: all 0.1s ease;
+  }
+
+  .neo-btn {
+    border: 3px solid var(--border);
+    box-shadow: 4px 4px 0px 0px var(--shadow);
+    font-weight: 800;
+    text-transform: uppercase;
+    transition: all 0.05s ease;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .neo-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px 0px var(--shadow);
+  }
+
+  .neo-input {
+    border: 3px solid var(--border);
+    background-color: var(--card-bg);
+    color: var(--text);
+    padding: 8px;
+    font-weight: 600;
+    width: 100%;
+  }
+
+  /* Tabs styling */
+  .tab-active {
+    background-color: var(--primary) !important;
+    color: white !important;
+    transform: translateY(-4px);
+    box-shadow: 4px 4px 0px 0px var(--shadow) !important;
+  }
+
+  .tab-inactive {
+    background-color: var(--card-bg);
+    box-shadow: 2px 2px 0px 0px var(--shadow);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--bg);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border: 2px solid var(--border);
+  }
+
+  /* Animations */
+  .hp-bar {
+    transition: width 0.3s ease-in-out;
+  }
 }
