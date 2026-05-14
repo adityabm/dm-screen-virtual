@@ -60,6 +60,7 @@ export const translations = {
     confirmDeleteTab: "Delete this tab?",
     confirmResetEnemies: "Reset all enemies?",
     confirmDeleteNpc: "Delete NPC?",
+    confirmResetTimer: "Reset session timer?",
     
     // Default App Data strings
     defaultTabTitle: "Main Plot",
@@ -125,6 +126,7 @@ export const translations = {
     confirmDeleteTab: "Hapus tab ini?",
     confirmResetEnemies: "Reset semua musuh?",
     confirmDeleteNpc: "Hapus NPC?",
+    confirmResetTimer: "Reset timer sesi?",
 
     // Default App Data strings
     defaultTabTitle: "Plot Utama",

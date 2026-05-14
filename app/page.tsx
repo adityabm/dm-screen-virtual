@@ -47,6 +47,11 @@ type AppData = {
   encounters: Encounter[];
   reference: string;
   darkMode: boolean;
+  sessionTimer?: {
+    isRunning: boolean;
+    lastStarted: number | null;
+    accumulated: number;
+  };
 };
 
 const defaultAppData: AppData = {
@@ -64,6 +69,11 @@ const defaultAppData: AppData = {
   encounters: [],
   reference: translations.en.defaultReference,
   darkMode: false,
+  sessionTimer: {
+    isRunning: false,
+    lastStarted: null,
+    accumulated: 0,
+  },
 };
 
 const npcPool = {
@@ -112,6 +122,21 @@ export default function DMUltimateScreen() {
   const notifTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const [timeStr, setTimeStr] = useState("00:00:00");
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  // Timer logic
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    const st = appData.sessionTimer;
+    if (st?.isRunning && st.lastStarted) {
+      interval = setInterval(() => {
+        setElapsedTime(Date.now() - st.lastStarted! + st.accumulated);
+      }, 1000);
+    } else {
+      setElapsedTime(st?.accumulated || 0);
+    }
+    return () => clearInterval(interval);
+  }, [appData.sessionTimer]);
 
   // Load from LocalStorage
   useEffect(() => {
@@ -170,6 +195,37 @@ export default function DMUltimateScreen() {
 
   const changeLanguage = (lang: Language) => {
     updateAppData((prev) => ({ ...prev, language: lang }), false);
+  };
+
+  const toggleTimer = () => {
+    updateAppData((prev) => {
+      const current = prev.sessionTimer || { isRunning: false, lastStarted: null, accumulated: 0 };
+      if (current.isRunning) {
+        // Pause
+        const newAccumulated = current.accumulated + (Date.now() - (current.lastStarted || Date.now()));
+        return { ...prev, sessionTimer: { isRunning: false, lastStarted: null, accumulated: newAccumulated } };
+      } else {
+        // Start
+        return { ...prev, sessionTimer: { isRunning: true, lastStarted: Date.now(), accumulated: current.accumulated } };
+      }
+    }, false);
+  };
+
+  const resetTimer = () => {
+    if (window.confirm(t.confirmResetTimer || "Reset timer?")) {
+      updateAppData((prev) => ({
+        ...prev,
+        sessionTimer: { isRunning: false, lastStarted: null, accumulated: 0 }
+      }), false);
+    }
+  };
+
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
   // Tabs
@@ -378,6 +434,21 @@ export default function DMUltimateScreen() {
           <button onClick={toggleDarkMode} className="neo-btn bg-white text-black p-3 rounded-full" title="Toggle Dark Mode">
             <i className={`fas ${appData.darkMode ? "fa-sun text-yellow-400" : "fa-moon text-black"}`}></i>
           </button>
+          
+          <div className="neo-card bg-orange-300 p-2 hidden sm:flex items-center gap-2">
+            <div className="text-xl font-black font-mono text-black w-24 text-center">
+              {formatTime(elapsedTime)}
+            </div>
+            <div className="flex gap-1">
+              <button onClick={toggleTimer} className="neo-btn bg-white text-black w-8 h-8 rounded-full">
+                <i className={`fas ${appData.sessionTimer?.isRunning ? "fa-pause" : "fa-play"} text-sm`}></i>
+              </button>
+              <button onClick={resetTimer} className="neo-btn bg-red-500 text-white w-8 h-8 rounded-full">
+                <i className="fas fa-redo text-xs"></i>
+              </button>
+            </div>
+          </div>
+
           <div className="neo-card bg-accent p-3 text-xl font-black font-mono text-black">
             {timeStr}
           </div>
