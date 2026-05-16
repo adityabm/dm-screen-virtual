@@ -55,17 +55,26 @@ export const translations = {
     npcSaved: "NPC SAVED!",
     dataSaved: "DATA SAVED!",
     storageFull: "STORAGE FULL!",
+    exportData: "EXPORT DATA",
+    importData: "IMPORT DATA",
+    dataExported: "DATA EXPORTED!",
+    dataImported: "DATA IMPORTED!",
+    importFailed: "IMPORT FAILED!",
+    newCampaign: "NEW CAMPAIGN",
     
     // Prompts
     confirmDeleteTab: "Delete this tab?",
     confirmResetEnemies: "Reset all enemies?",
     confirmDeleteNpc: "Delete NPC?",
     confirmResetTimer: "Reset session timer?",
+    confirmNewCampaign: "Are you sure you want to start a new campaign? All current data will be lost!",
     
     // Default App Data strings
     defaultTabTitle: "Main Plot",
     defaultTabContent: "Start your adventure here...",
     defaultReference: "• Status:\nBlinded: Disadv on attacks.\nProne: Melee attackers have Adv.\n\n• DC:\n10: Easy\n15: Medium\n20: Hard",
+    defaultCampaignTitle: "My Epic Campaign",
+    campaignTitlePlaceholder: "Campaign Title...",
   },
   id: {
     // Header
@@ -121,17 +130,26 @@ export const translations = {
     npcSaved: "NPC DISIMPAN!",
     dataSaved: "DATA DISIMPAN!",
     storageFull: "STORAGE PENUH!",
+    exportData: "EKSPOR DATA",
+    importData: "IMPOR DATA",
+    dataExported: "DATA DIEKSPOR!",
+    dataImported: "DATA DIIMPOR!",
+    importFailed: "GAGAL IMPOR!",
+    newCampaign: "KAMPANYE BARU",
     
     // Prompts
     confirmDeleteTab: "Hapus tab ini?",
     confirmResetEnemies: "Reset semua musuh?",
     confirmDeleteNpc: "Hapus NPC?",
     confirmResetTimer: "Reset timer sesi?",
+    confirmNewCampaign: "Yakin ingin memulai kampanye baru? Semua data saat ini akan dihapus!",
 
     // Default App Data strings
     defaultTabTitle: "Plot Utama",
     defaultTabContent: "Mulai petualanganmu di sini...",
     defaultReference: "• Status:\nBlinded: Disadv on attacks.\nProne: Melee attackers have Adv.\n\n• DC:\n10: Easy\n15: Medium\n20: Hard",
+    defaultCampaignTitle: "Kampanye Epikku",
+    campaignTitlePlaceholder: "Judul Kampanye...",
   }
 };
 

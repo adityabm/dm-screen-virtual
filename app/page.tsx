@@ -7,7 +7,7 @@ import { translations, npcPoolTranslations, Language } from "./i18n";
 type Tab = {
   title: string;
   content: string;
-  image: string | null;
+  images?: string[];
 };
 
 type Initiative = {
@@ -40,6 +40,7 @@ type Encounter = {
 
 type AppData = {
   language: Language;
+  campaignTitle?: string;
   tabs: Tab[];
   activeTabIndex: number;
   initiative: Initiative[];
@@ -56,11 +57,12 @@ type AppData = {
 
 const defaultAppData: AppData = {
   language: "en",
+  campaignTitle: translations.en.defaultCampaignTitle,
   tabs: [
     {
       title: translations.en.defaultTabTitle,
       content: translations.en.defaultTabContent,
-      image: null,
+      images: [],
     },
   ],
   activeTabIndex: 0,
@@ -77,8 +79,25 @@ const defaultAppData: AppData = {
 };
 
 const npcPool = {
-  names: ["Grog", "Elara", "Finn", "Morgra", "Thorn", "Siv", "Kael", "Runa", "Boric", "Lyra"],
-  lastNames: ["Ironheart", "Shadowstep", "Oakmantle", "Stormborn", "Fireweaver"],
+  names: [
+    "Grog",
+    "Elara",
+    "Finn",
+    "Morgra",
+    "Thorn",
+    "Siv",
+    "Kael",
+    "Runa",
+    "Boric",
+    "Lyra",
+  ],
+  lastNames: [
+    "Ironheart",
+    "Shadowstep",
+    "Oakmantle",
+    "Stormborn",
+    "Fireweaver",
+  ],
   races: ["Human", "Elf", "Dwarf", "Halfling", "Tiefling", "Dragonborn"],
   classes: ["Warrior", "Mage", "Rogue", "Cleric", "Bard", "Ranger"],
 };
@@ -95,6 +114,22 @@ export default function DMUltimateScreen() {
         try {
           const parsed = JSON.parse(saved);
           if (!parsed.language) parsed.language = "en";
+          if (!parsed.campaignTitle)
+            parsed.campaignTitle =
+              translations[parsed.language as Language].defaultCampaignTitle;
+              
+          if (parsed.tabs) {
+            parsed.tabs = parsed.tabs.map((tab: any) => {
+              const newTab = { ...tab };
+              if (!newTab.images) newTab.images = [];
+              if (newTab.image) {
+                newTab.images.push(newTab.image);
+                delete newTab.image;
+              }
+              return newTab;
+            });
+          }
+
           return parsed;
         } catch (e) {
           console.error("Error parsing saved data", e);
@@ -123,6 +158,7 @@ export default function DMUltimateScreen() {
 
   const [timeStr, setTimeStr] = useState("00:00:00");
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
 
   // Timer logic
   useEffect(() => {
@@ -172,14 +208,85 @@ export default function DMUltimateScreen() {
 
   const saveAllData = (dataToSave: AppData, notify = true) => {
     try {
-      localStorage.setItem("dmScreenUltimateData_V5", JSON.stringify(dataToSave));
+      localStorage.setItem(
+        "dmScreenUltimateData_V5",
+        JSON.stringify(dataToSave),
+      );
       if (notify) showMsg(t.dataSaved);
     } catch (e) {
       showMsg(t.storageFull);
     }
   };
 
-  const updateAppData = (updater: (prev: AppData) => AppData, notifySave = false) => {
+  const exportData = () => {
+    const dataStr = JSON.stringify(appData, null, 2);
+    const blob = new Blob([dataStr], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const safeTitle = (appData.campaignTitle || "dmscreen").replace(
+      /\s+/g,
+      "_",
+    );
+    link.download = `${safeTitle}_campaign.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showMsg(t.dataExported);
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const parsed = JSON.parse(evt.target?.result as string);
+        if (!parsed.language) parsed.language = "en";
+
+        if (parsed.tabs) {
+          parsed.tabs = parsed.tabs.map((tab: any) => {
+            const newTab = { ...tab };
+            if (!newTab.images) newTab.images = [];
+            if (newTab.image) {
+              newTab.images.push(newTab.image);
+              delete newTab.image;
+            }
+            return newTab;
+          });
+        }
+
+        setAppData(parsed);
+        saveAllData(parsed, false);
+        showMsg(t.dataImported);
+      } catch (err) {
+        console.error("Failed to parse data", err);
+        showMsg(t.importFailed);
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    e.target.value = "";
+  };
+
+  const startNewCampaign = () => {
+    if (window.confirm(t.confirmNewCampaign)) {
+      const freshData = {
+        ...defaultAppData,
+        campaignTitle: translations[appData.language].defaultCampaignTitle,
+        language: appData.language,
+        darkMode: appData.darkMode,
+      };
+      setAppData(freshData);
+      saveAllData(freshData, true);
+    }
+  };
+
+  const updateAppData = (
+    updater: (prev: AppData) => AppData,
+    notifySave = false,
+  ) => {
     setAppData((prev) => {
       const next = updater(prev);
       saveAllData(next, notifySave);
@@ -199,24 +306,47 @@ export default function DMUltimateScreen() {
 
   const toggleTimer = () => {
     updateAppData((prev) => {
-      const current = prev.sessionTimer || { isRunning: false, lastStarted: null, accumulated: 0 };
+      const current = prev.sessionTimer || {
+        isRunning: false,
+        lastStarted: null,
+        accumulated: 0,
+      };
       if (current.isRunning) {
         // Pause
-        const newAccumulated = current.accumulated + (Date.now() - (current.lastStarted || Date.now()));
-        return { ...prev, sessionTimer: { isRunning: false, lastStarted: null, accumulated: newAccumulated } };
+        const newAccumulated =
+          current.accumulated +
+          (Date.now() - (current.lastStarted || Date.now()));
+        return {
+          ...prev,
+          sessionTimer: {
+            isRunning: false,
+            lastStarted: null,
+            accumulated: newAccumulated,
+          },
+        };
       } else {
         // Start
-        return { ...prev, sessionTimer: { isRunning: true, lastStarted: Date.now(), accumulated: current.accumulated } };
+        return {
+          ...prev,
+          sessionTimer: {
+            isRunning: true,
+            lastStarted: Date.now(),
+            accumulated: current.accumulated,
+          },
+        };
       }
     }, false);
   };
 
   const resetTimer = () => {
     if (window.confirm(t.confirmResetTimer || "Reset timer?")) {
-      updateAppData((prev) => ({
-        ...prev,
-        sessionTimer: { isRunning: false, lastStarted: null, accumulated: 0 }
-      }), false);
+      updateAppData(
+        (prev) => ({
+          ...prev,
+          sessionTimer: { isRunning: false, lastStarted: null, accumulated: 0 },
+        }),
+        false,
+      );
     }
   };
 
@@ -225,7 +355,7 @@ export default function DMUltimateScreen() {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
     const s = totalSeconds % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   // Tabs
@@ -234,7 +364,7 @@ export default function DMUltimateScreen() {
   const addNewTab = () => {
     updateAppData((prev) => ({
       ...prev,
-      tabs: [...prev.tabs, { title: t.newTab, content: "", image: null }],
+      tabs: [...prev.tabs, { title: t.newTab, content: "", images: [] }],
       activeTabIndex: prev.tabs.length,
     }));
   };
@@ -271,23 +401,46 @@ export default function DMUltimateScreen() {
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      updateAppData((prev) => {
-        const newTabs = [...prev.tabs];
-        newTabs[prev.activeTabIndex].image = evt.target?.result as string;
-        return { ...prev, tabs: newTabs };
-      });
-    };
-    reader.readAsDataURL(file);
+    const fileArray = Array.from(e.target.files || []);
+    if (fileArray.length === 0) return;
+    
+    const newImages: string[] = [];
+    let loadedCount = 0;
+    const fileCount = fileArray.length;
+    
+    fileArray.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        if (evt.target?.result) {
+          newImages.push(evt.target.result as string);
+        }
+        loadedCount++;
+        if (loadedCount === fileCount) {
+          updateAppData((prev) => {
+            const newTabs = [...prev.tabs];
+            const updatedTab = { ...newTabs[prev.activeTabIndex] };
+            updatedTab.images = [
+              ...(updatedTab.images || []),
+              ...newImages,
+            ];
+            newTabs[prev.activeTabIndex] = updatedTab;
+            return { ...prev, tabs: newTabs };
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = "";
   };
 
-  const removeImage = () => {
+  const removeImage = (indexToRemove: number) => {
     updateAppData((prev) => {
       const newTabs = [...prev.tabs];
-      newTabs[prev.activeTabIndex].image = null;
+      const updatedTab = { ...newTabs[prev.activeTabIndex] };
+      if (updatedTab.images) {
+        updatedTab.images = updatedTab.images.filter((_, idx) => idx !== indexToRemove);
+      }
+      newTabs[prev.activeTabIndex] = updatedTab;
       return { ...prev, tabs: newTabs };
     });
   };
@@ -322,10 +475,16 @@ export default function DMUltimateScreen() {
   const addEnemy = () => {
     const max = parseInt(enemyHp);
     if (!enemyName || isNaN(max)) return;
-    updateAppData((prev) => ({
-      ...prev,
-      encounters: [...prev.encounters, { id: Date.now(), name: enemyName, maxHp: max, curHp: max }],
-    }), false);
+    updateAppData(
+      (prev) => ({
+        ...prev,
+        encounters: [
+          ...prev.encounters,
+          { id: Date.now(), name: enemyName, maxHp: max, curHp: max },
+        ],
+      }),
+      false,
+    );
     setEnemyName("");
     setEnemyHp("");
   };
@@ -333,7 +492,10 @@ export default function DMUltimateScreen() {
   const updateEnemyHP = (idx: number, amount: number) => {
     updateAppData((prev) => {
       const enc = [...prev.encounters];
-      enc[idx].curHp = Math.max(0, Math.min(enc[idx].maxHp, enc[idx].curHp + amount));
+      enc[idx].curHp = Math.max(
+        0,
+        Math.min(enc[idx].maxHp, enc[idx].curHp + amount),
+      );
       return { ...prev, encounters: enc };
     }, false);
   };
@@ -358,18 +520,27 @@ export default function DMUltimateScreen() {
     // eslint-disable-next-line react-hooks/purity
     const f = npcPool.names[Math.floor(Math.random() * npcPool.names.length)];
     // eslint-disable-next-line react-hooks/purity
-    const l = npcPool.lastNames[Math.floor(Math.random() * npcPool.lastNames.length)];
+    const l =
+      npcPool.lastNames[Math.floor(Math.random() * npcPool.lastNames.length)];
     // eslint-disable-next-line react-hooks/purity
     const r = npcPool.races[Math.floor(Math.random() * npcPool.races.length)];
     // eslint-disable-next-line react-hooks/purity
-    const c = npcPool.classes[Math.floor(Math.random() * npcPool.classes.length)];
+    const c =
+      npcPool.classes[Math.floor(Math.random() * npcPool.classes.length)];
 
     const npc: NPC = {
       id: Date.now(),
       name: `${f} ${l}`,
       sub: `${r} ${c}`,
       // eslint-disable-next-line react-hooks/purity
-      stats: { str: rDice(), dex: rDice(), con: rDice(), int: rDice(), wis: rDice(), cha: rDice() },
+      stats: {
+        str: rDice(),
+        dex: rDice(),
+        con: rDice(),
+        int: rDice(),
+        wis: rDice(),
+        cha: rDice(),
+      },
       // eslint-disable-next-line react-hooks/purity
       trait: tPool.traits[Math.floor(Math.random() * tPool.traits.length)],
       // eslint-disable-next-line react-hooks/purity
@@ -381,11 +552,14 @@ export default function DMUltimateScreen() {
   };
 
   const saveCurrentNPC = () => {
-    if (currentNPC && !appData.savedNPCs.some(n => n.id === currentNPC.id)) {
-      updateAppData((prev) => ({
-        ...prev,
-        savedNPCs: [...prev.savedNPCs, currentNPC],
-      }), false);
+    if (currentNPC && !appData.savedNPCs.some((n) => n.id === currentNPC.id)) {
+      updateAppData(
+        (prev) => ({
+          ...prev,
+          savedNPCs: [...prev.savedNPCs, currentNPC],
+        }),
+        false,
+      );
       showMsg(t.npcSaved);
     }
     setShowNpcModal(false);
@@ -415,14 +589,68 @@ export default function DMUltimateScreen() {
   return (
     <div className="p-4 md:p-6 min-h-screen">
       {/* HEADER */}
-      <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-        <div className="neo-card p-4 transform -rotate-1">
-          <h1 className="text-3xl md:text-4xl font-fantasy font-black tracking-tighter">
-            {t.title} <span className="bg-primary text-white px-2">{t.subtitle}</span> {t.screen}
-          </h1>
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col gap-2 w-full md:w-auto">
+          <div className="neo-card p-4 transform -rotate-1 w-fit">
+            <h1 className="text-3xl md:text-4xl font-fantasy font-black tracking-tighter">
+              {t.title}{" "}
+              <span className="bg-primary text-white px-2">{t.subtitle}</span>{" "}
+              {t.screen}
+            </h1>
+          </div>
+          <input
+            value={appData.campaignTitle || ""}
+            onChange={(e) =>
+              updateAppData(
+                (prev) => ({ ...prev, campaignTitle: e.target.value }),
+                false,
+              )
+            }
+            placeholder={t.campaignTitlePlaceholder}
+            className="text-xl md:text-2xl font-black bg-transparent border-b-4 border-black focus:outline-none focus:border-primary placeholder-black/30 w-full mt-8"
+          />
         </div>
-        <div className="flex gap-4 items-center">
-          <select 
+        <div className="flex flex-wrap gap-4 items-center justify-end">
+          {/* Global Data Controls */}
+          <div className="neo-card p-1 bg-gray-200 flex gap-1">
+            <button
+              onClick={startNewCampaign}
+              className="neo-btn bg-red-500 text-white w-10 h-10 flex items-center justify-center font-bold"
+              title={t.newCampaign}
+            >
+              <i className="fas fa-trash-alt text-lg"></i>
+            </button>
+            <input
+              type="file"
+              id="import-data"
+              className="hidden"
+              accept=".txt,.json"
+              onChange={importData}
+            />
+            <label
+              htmlFor="import-data"
+              className="neo-btn bg-blue-500 text-white w-10 h-10 flex items-center justify-center cursor-pointer font-bold m-0"
+              title={t.importData}
+            >
+              <i className="fas fa-file-import text-lg"></i>
+            </label>
+            <button
+              onClick={exportData}
+              className="neo-btn bg-purple-500 text-white w-10 h-10 flex items-center justify-center font-bold"
+              title={t.exportData}
+            >
+              <i className="fas fa-file-export text-lg"></i>
+            </button>
+            <button
+              onClick={() => saveAllData(appData, true)}
+              className="neo-btn bg-green-500 text-white w-10 h-10 flex items-center justify-center font-bold"
+              title={t.saveData}
+            >
+              <i className="fas fa-save text-lg"></i>
+            </button>
+          </div>
+
+          <select
             value={appData.language}
             onChange={(e) => changeLanguage(e.target.value as Language)}
             className="neo-btn bg-white text-black px-3 py-2 font-bold cursor-pointer outline-none"
@@ -431,19 +659,33 @@ export default function DMUltimateScreen() {
             <option value="id">ID</option>
           </select>
 
-          <button onClick={toggleDarkMode} className="neo-btn bg-white text-black p-3 rounded-full" title="Toggle Dark Mode">
-            <i className={`fas ${appData.darkMode ? "fa-sun text-yellow-400" : "fa-moon text-black"}`}></i>
+          <button
+            onClick={toggleDarkMode}
+            className="neo-btn bg-white text-black p-3 rounded-full"
+            title="Toggle Dark Mode"
+          >
+            <i
+              className={`fas ${appData.darkMode ? "fa-sun text-yellow-400" : "fa-moon text-black"}`}
+            ></i>
           </button>
-          
+
           <div className="neo-card bg-orange-300 p-2 hidden sm:flex items-center gap-2">
             <div className="text-xl font-black font-mono text-black w-24 text-center">
               {formatTime(elapsedTime)}
             </div>
             <div className="flex gap-1">
-              <button onClick={toggleTimer} className="neo-btn bg-white text-black w-8 h-8 rounded-full">
-                <i className={`fas ${appData.sessionTimer?.isRunning ? "fa-pause" : "fa-play"} text-sm`}></i>
+              <button
+                onClick={toggleTimer}
+                className="neo-btn bg-white text-black w-8 h-8 rounded-full"
+              >
+                <i
+                  className={`fas ${appData.sessionTimer?.isRunning ? "fa-pause" : "fa-play"} text-sm`}
+                ></i>
               </button>
-              <button onClick={resetTimer} className="neo-btn bg-red-500 text-white w-8 h-8 rounded-full">
+              <button
+                onClick={resetTimer}
+                className="neo-btn bg-red-500 text-white w-8 h-8 rounded-full"
+              >
                 <i className="fas fa-redo text-xs"></i>
               </button>
             </div>
@@ -464,17 +706,26 @@ export default function DMUltimateScreen() {
               <i className="fas fa-dice-d20 mr-2"></i> {t.diceRoller}
             </h2>
             <div className="grid grid-cols-3 gap-2 mb-3">
-              {[4, 6, 8, 10, 12].map(d => (
-                <button key={d} onClick={() => rollDice(d)} className="neo-btn bg-white text-black p-2 text-xs">
+              {[4, 6, 8, 10, 12].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => rollDice(d)}
+                  className="neo-btn bg-white text-black p-2 text-xs"
+                >
                   D{d}
                 </button>
               ))}
-              <button onClick={() => rollDice(20)} className="neo-btn bg-black text-white p-2 text-xs">
+              <button
+                onClick={() => rollDice(20)}
+                className="neo-btn bg-black text-white p-2 text-xs"
+              >
                 D20
               </button>
             </div>
             <div className="bg-white border-4 border-border p-4 text-center">
-              <div className={`text-5xl font-black text-black transition-transform ${diceScale ? "scale-125" : ""}`}>
+              <div
+                className={`text-5xl font-black text-black transition-transform ${diceScale ? "scale-125" : ""}`}
+              >
                 {diceResult}
               </div>
             </div>
@@ -486,23 +737,49 @@ export default function DMUltimateScreen() {
               <h2 className="font-black uppercase text-white">
                 <i className="fas fa-list-ol mr-2"></i> {t.initiative}
               </h2>
-              <button onClick={clearInitiative} className="text-[10px] font-bold underline uppercase text-white hover:bg-black p-1">
+              <button
+                onClick={clearInitiative}
+                className="text-[10px] font-bold underline uppercase text-white hover:bg-black p-1"
+              >
                 {t.clear}
               </button>
             </div>
             <div className="space-y-2 mb-4">
-              <input value={initName} onChange={e => setInitName(e.target.value)} type="text" placeholder={t.namePlaceholder} className="neo-input text-sm" />
+              <input
+                value={initName}
+                onChange={(e) => setInitName(e.target.value)}
+                type="text"
+                placeholder={t.namePlaceholder}
+                className="neo-input text-sm"
+              />
               <div className="flex gap-2">
-                <input value={initScore} onChange={e => setInitScore(e.target.value)} type="number" placeholder={t.rollPlaceholder} className="neo-input text-sm" />
-                <button onClick={addInitiative} className="neo-btn bg-black text-white px-4">+</button>
+                <input
+                  value={initScore}
+                  onChange={(e) => setInitScore(e.target.value)}
+                  type="number"
+                  placeholder={t.rollPlaceholder}
+                  className="neo-input text-sm"
+                />
+                <button
+                  onClick={addInitiative}
+                  className="neo-btn bg-black text-white px-4"
+                >
+                  +
+                </button>
               </div>
             </div>
             <ul className="space-y-2 max-h-40 overflow-y-auto pr-2">
-              {[...appData.initiative].sort((a, b) => b.score - a.score).map((i, idx) => (
-                <li key={idx} className="flex justify-between items-center bg-white text-black border-2 border-border p-2 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                  <span>{i.name}</span> <span className="bg-black text-white px-2">{i.score}</span>
-                </li>
-              ))}
+              {[...appData.initiative]
+                .sort((a, b) => b.score - a.score)
+                .map((i, idx) => (
+                  <li
+                    key={idx}
+                    className="flex justify-between items-center bg-white text-black border-2 border-border p-2 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    <span>{i.name}</span>{" "}
+                    <span className="bg-black text-white px-2">{i.score}</span>
+                  </li>
+                ))}
             </ul>
           </section>
 
@@ -513,12 +790,27 @@ export default function DMUltimateScreen() {
             </h2>
             <ul className="space-y-2 max-h-60 overflow-y-auto pr-2">
               {appData.savedNPCs.length === 0 ? (
-                <li className="text-[10px] italic text-white opacity-60">{t.noNpcs}</li>
+                <li className="text-[10px] italic text-white opacity-60">
+                  {t.noNpcs}
+                </li>
               ) : (
                 appData.savedNPCs.map((n, idx) => (
-                  <li key={n.id} className="bg-white text-black border-2 border-border p-1 shadow-[2px_2px_0px_0px_black] flex justify-between items-center text-[10px] font-bold">
-                    <span className="cursor-pointer truncate flex-grow" onClick={() => viewSavedNPC(n)}>{n.name}</span>
-                    <button onClick={() => deleteSavedNPC(idx)} className="text-red-500 ml-1">X</button>
+                  <li
+                    key={n.id}
+                    className="bg-white text-black border-2 border-border p-1 shadow-[2px_2px_0px_0px_black] flex justify-between items-center text-[12px] font-bold"
+                  >
+                    <span
+                      className="cursor-pointer truncate flex-grow"
+                      onClick={() => viewSavedNPC(n)}
+                    >
+                      {n.name}
+                    </span>
+                    <button
+                      onClick={() => deleteSavedNPC(idx)}
+                      className="text-red-500 ml-1"
+                    >
+                      X
+                    </button>
                   </li>
                 ))
               )}
@@ -533,55 +825,84 @@ export default function DMUltimateScreen() {
               {appData.tabs.map((tab, idx) => (
                 <button
                   key={idx}
-                  onClick={() => updateAppData(prev => ({ ...prev, activeTabIndex: idx }), false)}
+                  onClick={() =>
+                    updateAppData(
+                      (prev) => ({ ...prev, activeTabIndex: idx }),
+                      false,
+                    )
+                  }
                   className={`neo-btn px-4 py-2 text-xs min-w-[80px] truncate max-w-[120px] ${idx === appData.activeTabIndex ? "tab-active" : "tab-inactive"}`}
                 >
                   {tab.title}
                 </button>
               ))}
             </div>
-            <button onClick={addNewTab} className="neo-btn bg-accent text-black w-10 h-10 text-xl">+</button>
+            <button
+              onClick={addNewTab}
+              className="neo-btn bg-accent text-black w-10 h-10 text-xl"
+            >
+              +
+            </button>
           </div>
 
           <section className="neo-card flex-grow p-6 relative min-h-[600px] flex flex-col overflow-hidden">
             <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
               <input
                 value={activeTab.title}
-                onChange={e => updateTabTitle(e.target.value)}
+                onChange={(e) => updateTabTitle(e.target.value)}
                 className="text-2xl font-black uppercase border-b-4 border-border bg-transparent focus:outline-none flex-grow mr-4"
               />
               <div className="flex gap-2">
-                <label className="neo-btn bg-blue-500 text-white p-2 cursor-pointer" title={t.uploadImage}>
+                <label
+                  className="neo-btn bg-blue-500 text-white p-2 cursor-pointer"
+                  title={t.uploadImage}
+                >
                   <i className="fas fa-image"></i>
-                  <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageUpload}
+                  />
                 </label>
-                <button onClick={deleteCurrentTab} className="neo-btn bg-red-500 text-white p-2" title={t.deleteTab}>
+                <button
+                  onClick={deleteCurrentTab}
+                  className="neo-btn bg-red-500 text-white p-2"
+                  title={t.deleteTab}
+                >
                   <i className="fas fa-trash"></i>
                 </button>
               </div>
             </div>
 
-            {activeTab.image && (
-              <div className="mb-4 border-4 border-border relative">
-                <img src={activeTab.image} className="w-full max-h-[300px] object-contain bg-black" alt="Tab content" />
-                <button onClick={removeImage} className="absolute top-2 right-2 bg-red-500 text-white p-1 text-xs border-2 border-black font-bold">
-                  {t.deleteImage}
-                </button>
+            {activeTab.images && activeTab.images.length > 0 && (
+              <div className="mb-4 flex flex-wrap gap-4">
+                {activeTab.images.map((img, idx) => (
+                  <div key={idx} className="relative border-4 border-border flex-grow max-w-[100%] lg:max-w-[48%]">
+                    <img
+                      src={img}
+                      className="w-full max-h-[300px] object-contain bg-black cursor-pointer hover:opacity-90 transition-opacity"
+                      alt={`Tab content ${idx + 1}`}
+                      onClick={() => setEnlargedImage(img)}
+                    />
+                    <button
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-2 right-2 bg-red-500 text-white p-1 text-xs border-2 border-black font-bold"
+                    >
+                      {t.deleteImage}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
             <textarea
               value={activeTab.content}
-              onChange={e => updateTabContent(e.target.value)}
+              onChange={(e) => updateTabContent(e.target.value)}
               className="flex-grow w-full font-semibold text-lg bg-transparent focus:outline-none resize-none"
               placeholder={t.plotPlaceholder}
             />
-
-            <div className="mt-4 flex justify-end">
-              <button onClick={() => saveAllData(appData, true)} className="neo-btn bg-green-500 text-white px-6 py-2 text-sm">
-                {t.saveData}
-              </button>
-            </div>
           </section>
         </main>
 
@@ -593,38 +914,96 @@ export default function DMUltimateScreen() {
               <h2 className="font-black uppercase text-white">
                 <i className="fas fa-skull mr-2"></i> {t.encounter}
               </h2>
-              <button onClick={clearEncounter} className="text-[10px] font-bold underline uppercase text-white hover:bg-black p-1">
+              <button
+                onClick={clearEncounter}
+                className="text-[10px] font-bold underline uppercase text-white hover:bg-black p-1"
+              >
                 {t.reset}
               </button>
             </div>
             <div className="space-y-2 mb-4">
-              <input value={enemyName} onChange={e => setEnemyName(e.target.value)} type="text" placeholder={t.enemyPlaceholder} className="neo-input text-sm" />
+              <input
+                value={enemyName}
+                onChange={(e) => setEnemyName(e.target.value)}
+                type="text"
+                placeholder={t.enemyPlaceholder}
+                className="neo-input text-sm"
+              />
               <div className="flex gap-2">
-                <input value={enemyHp} onChange={e => setEnemyHp(e.target.value)} type="number" placeholder={t.hpPlaceholder} className="neo-input text-sm" />
-                <button onClick={addEnemy} className="neo-btn bg-black text-white px-4 font-black">+</button>
+                <input
+                  value={enemyHp}
+                  onChange={(e) => setEnemyHp(e.target.value)}
+                  type="number"
+                  placeholder={t.hpPlaceholder}
+                  className="neo-input text-sm"
+                />
+                <button
+                  onClick={addEnemy}
+                  className="neo-btn bg-black text-white px-4 font-black"
+                >
+                  +
+                </button>
               </div>
             </div>
             <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
               {appData.encounters.map((e, idx) => {
                 const percentage = (e.curHp / e.maxHp) * 100;
-                const colorClass = percentage > 50 ? "bg-green-500" : percentage > 20 ? "bg-yellow-500" : "bg-red-600";
+                const colorClass =
+                  percentage > 50
+                    ? "bg-green-500"
+                    : percentage > 20
+                      ? "bg-yellow-500"
+                      : "bg-red-600";
                 return (
-                  <div key={e.id} className="neo-card p-3 bg-white text-black text-xs font-bold space-y-2">
+                  <div
+                    key={e.id}
+                    className="neo-card p-3 bg-white text-black text-xs font-bold space-y-2"
+                  >
                     <div className="flex justify-between">
                       <span className="truncate pr-2">{e.name}</span>
-                      <button onClick={() => removeEnemy(idx)} className="text-red-500 hover:bg-black p-0.5"><i className="fas fa-trash"></i></button>
+                      <button
+                        onClick={() => removeEnemy(idx)}
+                        className="text-red-500 hover:bg-black p-0.5"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => updateEnemyHP(idx, -1)} className="neo-btn bg-red-400 w-6 h-6 p-0 shadow-[2px_2px_0px_0px_black]">-1</button>
-                      <div className="flex-grow bg-gray-200 border-2 border-black h-4 relative overflow-hidden">
-                        <div className={`hp-bar h-full ${colorClass}`} style={{ width: `${percentage}%` }}></div>
-                        <span className="absolute inset-0 flex items-center justify-center text-[8px] mix-blend-difference text-white">{e.curHp}/{e.maxHp}</span>
+                      <button
+                        onClick={() => updateEnemyHP(idx, -1)}
+                        className="neo-btn bg-red-400 w-6 h-6 p-0 shadow-[2px_2px_0px_0px_black]"
+                      >
+                        -1
+                      </button>
+                      <div className="flex-grow bg-gray-200 border-2 border-black h-6 relative overflow-hidden">
+                        <div
+                          className={`hp-bar h-full ${colorClass}`}
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                        <span className="absolute inset-0 flex items-center justify-center text-[12px] mix-blend-difference text-white">
+                          {e.curHp}/{e.maxHp}
+                        </span>
                       </div>
-                      <button onClick={() => updateEnemyHP(idx, 1)} className="neo-btn bg-green-400 w-6 h-6 p-0 shadow-[2px_2px_0px_0px_black]">+1</button>
+                      <button
+                        onClick={() => updateEnemyHP(idx, 1)}
+                        className="neo-btn bg-green-400 w-6 h-6 p-0 shadow-[2px_2px_0px_0px_black]"
+                      >
+                        +1
+                      </button>
                     </div>
                     <div className="flex justify-center gap-2">
-                      <button onClick={() => updateEnemyHP(idx, -5)} className="neo-btn bg-red-600 text-white px-2 py-0.5 shadow-[2px_2px_0px_0px_black]">-5</button>
-                      <button onClick={() => updateEnemyHP(idx, 5)} className="neo-btn bg-green-600 text-white px-2 py-0.5 shadow-[2px_2px_0px_0px_black]">+5</button>
+                      <button
+                        onClick={() => updateEnemyHP(idx, -5)}
+                        className="neo-btn bg-red-600 text-white px-2 py-0.5 shadow-[2px_2px_0px_0px_black]"
+                      >
+                        -5
+                      </button>
+                      <button
+                        onClick={() => updateEnemyHP(idx, 5)}
+                        className="neo-btn bg-green-600 text-white px-2 py-0.5 shadow-[2px_2px_0px_0px_black]"
+                      >
+                        +5
+                      </button>
                     </div>
                   </div>
                 );
@@ -634,12 +1013,19 @@ export default function DMUltimateScreen() {
 
           {/* NPC Gen */}
           <section className="neo-card p-4 bg-pink-400">
-            <h2 className="font-black uppercase mb-3 text-black">{t.npcGenerator}</h2>
+            <h2 className="font-black uppercase mb-3 text-black">
+              {t.npcGenerator}
+            </h2>
             {currentNPC && !isViewingSavedNpc ? (
               <div className="bg-white border-4 border-black p-3 mb-3 font-bold text-sm text-black">
                 <div className="text-lg">{currentNPC.name}</div>
-                <div className="text-xs text-gray-500 italic mb-2">{currentNPC.sub}</div>
-                <button onClick={() => setShowNpcModal(true)} className="neo-btn bg-black text-white w-full py-1 text-[10px]">
+                <div className="text-xs text-gray-500 italic mb-2">
+                  {currentNPC.sub}
+                </div>
+                <button
+                  onClick={() => setShowNpcModal(true)}
+                  className="neo-btn bg-black text-white w-full py-1 text-[10px]"
+                >
                   {t.viewDetails}
                 </button>
               </div>
@@ -648,17 +1034,22 @@ export default function DMUltimateScreen() {
                 {t.clickGenerate}
               </div>
             )}
-            <button onClick={generateNPC} className="neo-btn bg-white text-black w-full py-2 text-sm">
+            <button
+              onClick={generateNPC}
+              className="neo-btn bg-white text-black w-full py-2 text-sm"
+            >
               {t.generateBtn}
             </button>
           </section>
 
           {/* Reference */}
           <section className="neo-card p-4 bg-orange-400">
-            <h2 className="font-black uppercase mb-3 text-white">{t.dmRules}</h2>
+            <h2 className="font-black uppercase mb-3 text-white">
+              {t.dmRules}
+            </h2>
             <textarea
               value={appData.reference}
-              onChange={e => updateReference(e.target.value)}
+              onChange={(e) => updateReference(e.target.value)}
               className="neo-input flex-grow text-xs leading-relaxed font-bold h-40 focus:bg-yellow-50 focus:text-black"
               placeholder={t.rulesPlaceholder}
             />
@@ -672,35 +1063,84 @@ export default function DMUltimateScreen() {
           <div className="neo-card w-full max-w-md bg-white text-black p-6 relative">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h2 className="text-3xl font-fantasy font-black">{currentNPC.name}</h2>
-                <p className="text-primary font-bold italic">{currentNPC.sub}</p>
+                <h2 className="text-3xl font-fantasy font-black">
+                  {currentNPC.name}
+                </h2>
+                <p className="text-primary font-bold italic">
+                  {currentNPC.sub}
+                </p>
               </div>
-              <button onClick={() => setShowNpcModal(false)} className="neo-btn bg-black text-white w-8 h-8">
+              <button
+                onClick={() => setShowNpcModal(false)}
+                className="neo-btn bg-black text-white w-8 h-8"
+              >
                 X
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2 mb-4">
-              {(['str', 'dex', 'con', 'int', 'wis', 'cha'] as const).map((stat) => (
-                <div key={stat} className="border-2 border-black p-2 text-center">
-                  <div className="text-[10px] font-black uppercase">{stat}</div>
-                  <div className="text-xl font-black">{currentNPC.stats[stat]}</div>
-                </div>
-              ))}
+              {(["str", "dex", "con", "int", "wis", "cha"] as const).map(
+                (stat) => (
+                  <div
+                    key={stat}
+                    className="border-2 border-black p-2 text-center"
+                  >
+                    <div className="text-[10px] font-black uppercase">
+                      {stat}
+                    </div>
+                    <div className="text-xl font-black">
+                      {currentNPC.stats[stat]}
+                    </div>
+                  </div>
+                ),
+              )}
             </div>
             <div className="space-y-2 text-sm border-t-2 border-black pt-4">
-              <p><strong>{t.personality}</strong> <span className="italic">{currentNPC.trait}</span></p>
-              <p><strong>{t.motivation}</strong> <span>{currentNPC.goal}</span></p>
+              <p>
+                <strong>{t.personality}</strong>{" "}
+                <span className="italic">{currentNPC.trait}</span>
+              </p>
+              <p>
+                <strong>{t.motivation}</strong> <span>{currentNPC.goal}</span>
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-6">
               {!isViewingSavedNpc && (
-                <button onClick={saveCurrentNPC} className="neo-btn bg-green-500 text-white py-2">
+                <button
+                  onClick={saveCurrentNPC}
+                  className="neo-btn bg-green-500 text-white py-2"
+                >
                   {t.saveNpcBtn}
                 </button>
               )}
-              <button onClick={() => setShowNpcModal(false)} className={`neo-btn bg-black text-white py-2 ${isViewingSavedNpc ? 'col-span-2' : ''}`}>
+              <button
+                onClick={() => setShowNpcModal(false)}
+                className={`neo-btn bg-black text-white py-2 ${isViewingSavedNpc ? "col-span-2" : ""}`}
+              >
                 {t.closeBtn}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enlarged Image Modal */}
+      {enlargedImage && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-[120] flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setEnlargedImage(null)}
+        >
+          <div className="relative max-w-full max-h-full flex items-center justify-center">
+            <img 
+              src={enlargedImage} 
+              alt="Enlarged" 
+              className="max-w-full max-h-[90vh] object-contain border-4 border-white neo-card"
+            />
+            <button 
+              onClick={(e) => { e.stopPropagation(); setEnlargedImage(null); }}
+              className="absolute -top-4 -right-4 neo-btn bg-red-500 text-white w-10 h-10 rounded-full flex items-center justify-center border-2 border-black"
+            >
+              <i className="fas fa-times"></i>
+            </button>
           </div>
         </div>
       )}
